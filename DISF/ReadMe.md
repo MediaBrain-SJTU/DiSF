@@ -12,7 +12,7 @@ python ./id2text.py
 ```
 #### Step 4) tokenize the raw text 
 ```bash
-python ../TinyLlama/scripts/prepare_slimpajama.py --source_path selected_raw_text_path \
+python ../TinyLLama/scripts/prepare_slimpajama.py --source_path selected_raw_text_path \
 --tokenizer_path data/llama --destination_path data/slim_star_combined \
 --split validation --percentage 1.0
 ```
