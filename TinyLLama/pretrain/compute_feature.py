@@ -1,0 +1,416 @@
+import glob
+import math
+import sys
+import time
+from pathlib import Path
+from typing import Optional, Tuple, Union
+import math
+import lightning as L
+import torch
+from lightning.fabric.strategies import FSDPStrategy, XLAStrategy
+from torch.utils.data import DataLoader
+from functools import partial
+# support running without installing as a package
+import os
+# os.environ['MASTER_PORT'] = '8888'
+os.environ["WANDB__SERVICE_WAIT"] = "3000"
+os.environ["WANDB_MODE"]="offline"
+wd = Path(__file__).parent.parent.resolve()
+sys.path.append(str(wd))
+# from apex.optimizers import FusedAdam #torch optimizer has a cuda backend, which is faster actually
+from lit_gpt.model import GPT, Block, Config, CausalSelfAttention
+from lit_gpt.packed_dataset import CombinedDataset, PackedDataset
+from lit_gpt.speed_monitor import SpeedMonitorFabric as Monitor
+from lit_gpt.speed_monitor import estimate_flops, measure_flops
+from lit_gpt.utils import chunked_cross_entropy, get_default_supported_precision, num_parameters, step_csv_logger, lazy_load
+from pytorch_lightning.loggers import WandbLogger
+from lit_gpt import FusedCrossEntropyLoss
+import random
+torch.cuda.init()
+print("############################### initalize global parameters ###################################")
+
+
+'''
+max_step:number of updating
+max_iters:number of gpu calculation of batch
+global_batch_size:number of all devices' batch in one step
+micro_batch_size:number of one device's batch in one iter
+token length=2048
+
+'''
+'''
+#1.1B:
+model_name = "tiny_LLaMA_1b"
+name = "tinyllama_1b_unifrom10B"
+out_dir = Path("out") / name
+num_of_devices = 8
+global_batch_size=512
+learning_rate = 4e-4
+micro_batch_size = 4
+max_step=100000
+warmup_steps=500
+log_step_interval = 10
+eval_iters = 100
+save_step_interval=1000
+eval_step_interval=1000
+#checkpoint_path = "/ailab/user/fanziqing/efficient/TinyLlama/out/tinyllama_1b/iter-800000-ckpt.pth"
+'''
+#'''
+#120M:
+model_name = "tiny_LLaMA_120M"
+name = "tinyllama_120M_cwd10B"
+out_dir = Path("out") / name
+num_of_devices = 1
+global_batch_size=512
+learning_rate = 4e-4
+micro_batch_size = 32
+max_step=100000
+warmup_steps=500
+log_step_interval = 10
+eval_iters = 10000
+save_step_interval=1000
+eval_step_interval=1000
+#'''
+
+show_interval=int(512/num_of_devices/micro_batch_size)
+weight_decay = 1e-1
+beta1 = 0.9
+beta2 = 0.95
+grad_clip = 1.0
+decay_lr = True
+min_lr = 4e-5
+
+
+batch_size = global_batch_size // num_of_devices
+gradient_accumulation_steps = batch_size // micro_batch_size
+assert gradient_accumulation_steps > 0
+warmup_iters = warmup_steps * gradient_accumulation_steps
+
+#resume=True
+
+
+max_iters = max_step * gradient_accumulation_steps
+lr_decay_iters = max_iters
+log_iter_interval = log_step_interval * gradient_accumulation_steps
+
+
+# Treat all dataset equally by their size. If you want to use a different weight for a dataset, add it to the list with the weight.
+# train_data_config = [
+#     ("train_slim", 0.693584),
+#     # ("train_star", 0.306416),
+# ]
+train_data_config = [
+    ("cwd",1.0)
+    #("DSIR10B",1.0)
+    #("uniform10B",1.0)
+    #("train_slim", 1.0),
+    # ("train_star", 0.306416),
+]
+val_data_config = [
+    ("validation", 1.0),
+]
+
+hparams = {k: v for k, v in locals().items() if isinstance(v, (int, float, str)) and not k.startswith("_")}
+logger = step_csv_logger("out", name, flush_logs_every_n_steps=log_iter_interval)
+wandb_logger = WandbLogger()
+
+
+def setup(
+    devices: int = 1,
+    #devices: int = 1,
+    train_data_dir: Path = Path("data/redpajama_sample"),
+    val_data_dir: Optional[Path] = None,
+    precision: Optional[str] = None,
+    tpu: bool = False,
+    resume: Union[bool, Path] = False,
+) -> None:
+    print("############################### setup ###################################")
+    precision = precision or get_default_supported_precision(training=True, tpu=tpu)
+    #devices=[0,1,2,3,4,5,6,7]
+    if devices > 1:
+        if tpu:
+            # For multi-host TPU training, the device count for Fabric is limited to the count on a single host.
+            devices = "auto"
+            strategy = XLAStrategy(sync_module_states=False)
+        else:
+            strategy = FSDPStrategy(
+                auto_wrap_policy={Block},
+                activation_checkpointing_policy=None,
+                state_dict_type="full",
+                limit_all_gathers=True,
+                cpu_offload=False,
+            )
+    else:
+        strategy = "auto"
+    #strategy = "auto"
+    fabric = L.Fabric(devices=devices, strategy=strategy, precision=precision, loggers=[logger, wandb_logger])
+    #fabric = L.Fabric(devices=[0,1,2,3,4,5,6,7], strategy=strategy, precision=precision, loggers=[logger, wandb_logger])
+    fabric.print(hparams)
+    #fabric.launch(main, train_data_dir, val_data_dir, resume)
+    main(fabric, train_data_dir, val_data_dir, resume)
+
+
+def main(fabric, train_data_dir, val_data_dir, resume):
+    monitor = Monitor(fabric, window_size=2, time_unit="seconds", log_iter_interval=log_iter_interval)
+    
+    if fabric.global_rank == 0:
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+    config = Config.from_name(model_name)
+    print("####################### loading dataset ##############################")
+    train_dataloader, val_dataloader = create_dataloaders(
+        batch_size=micro_batch_size,
+        block_size=config.block_size,
+        fabric=fabric,
+        train_data_dir=train_data_dir,
+        val_data_dir=val_data_dir,
+        seed=3407,
+    )
+    #print(len(train_dataloader))
+    
+    train_dataloader, val_dataloader = fabric.setup_dataloaders(train_dataloader, val_dataloader)
+    
+    #print(os.environ['LOCAL_RANK'])
+    #time.sleep(int(os.environ['LOCAL_RANK']) * 120)
+    fabric.seed_everything(3407)  # same seed for every process to init model (FSDP)
+    print("####################### loading model ##############################")
+    fabric.print(f"Loading model with {config.__dict__}")
+    t0 = time.perf_counter()
+    with fabric.init_module(empty_init=False):
+        model = GPT(config)
+        model.apply(partial(model._init_weights ,n_layer=config.n_layer))
+    #print(time.perf_counter()-t0)
+    fabric.print(f"Time to instantiate model: {time.perf_counter() - t0:.02f} seconds.")
+    fabric.print(f"Total parameters {num_parameters(model):,}")
+
+    model = fabric.setup(model)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=learning_rate, weight_decay=weight_decay, betas=(beta1, beta2), foreach=False
+    )
+    # optimizer = FusedAdam(model.parameters(), lr=learning_rate, weight_decay=weight_decay, betas=(beta1, beta2),adam_w_mode=True)
+    optimizer = fabric.setup_optimizers(optimizer)
+
+    state = {"model": model, "optimizer": optimizer, "hparams": hparams, "iter_num": 0, "step_count": 0}
+
+    #if resume is True:
+    #    resume = sorted(out_dir.glob("*.pth"))[-1]
+    if resume :
+        fabric.print(f"Resuming training from {resume}")
+        fabric.load(resume, state)
+
+    train_time = time.perf_counter()
+    print("####################### start validation ##############################")
+    train(fabric, state, val_dataloader, monitor)
+    fabric.print(f"Training time: {(time.perf_counter()-train_time):.2f}s")
+    if fabric.device.type == "cuda":
+        fabric.print(f"Memory used: {torch.cuda.max_memory_allocated() / 1e9:.02f} GB")
+
+
+def train(fabric, state, val_dataloader, monitor):
+    model = state["model"]
+
+
+
+    t0 = time.perf_counter()
+    val_loss = validate(fabric, model, val_dataloader)
+    t1 = time.perf_counter() - t0
+    monitor.eval_end(t1)
+    fabric.print(f"step {state['iter_num']}: val loss {val_loss:.4f}, val time: {t1 * 1000:.2f}ms")
+    fabric.log_dict({"metric/val_loss": val_loss.item(), "total_tokens": model.config.block_size * (state["iter_num"] + 1) * micro_batch_size * fabric.world_size}, state["step_count"])
+    fabric.log_dict({"metric/val_ppl": math.exp(val_loss.item()), "total_tokens": model.config.block_size * (state["iter_num"] + 1) * micro_batch_size * fabric.world_size}, state["step_count"])
+    fabric.barrier()
+
+
+        
+@torch.no_grad()
+def validate(fabric: L.Fabric, model: torch.nn.Module, val_dataloader: DataLoader) -> torch.Tensor:
+    fabric.print("Validating ...")
+    model.eval()
+
+    losses = torch.zeros(eval_iters, device=fabric.device)
+    for k, val_data in enumerate(val_dataloader):
+        if k >= eval_iters:
+            break
+        input_ids = val_data[:, 0 : model.config.block_size].contiguous()
+        #print(input_ids)
+        targets = val_data[:, 1 : model.config.block_size + 1].contiguous()
+        logits = model(input_ids)
+        loss = chunked_cross_entropy(logits, targets, chunk_size=0)
+
+        # loss_func = FusedCrossEntropyLoss()
+        # loss = loss_func(logits, targets)
+        losses[k] = loss.item()
+        
+    out = losses.mean()
+    #print(out)
+    model.train()
+    return out
+
+
+def create_dataloader(
+    batch_size: int, block_size: int, data_dir: Path, fabric, shuffle: bool = True, seed: int = 12345, split="train"
+) -> DataLoader:
+    datasets = []
+    data_config = train_data_config if split == "train" else val_data_config
+    for prefix, _ in data_config:
+        filenames = sorted(glob.glob(str(data_dir / f"{prefix}*")))
+        random.seed(seed)
+        random.shuffle(filenames)
+        #print(prefix)
+        #print(filenames)
+
+        dataset = PackedDataset(
+            filenames,
+            # n_chunks control the buffer size. 
+            # Note that the buffer size also impacts the random shuffle
+            # (PackedDataset is an IterableDataset. So the shuffle is done by prefetch a buffer and shuffle the buffer)
+            #n_chunks=1,
+            n_chunks=8,
+            block_size=block_size,
+            shuffle=shuffle,
+            seed=seed+fabric.global_rank,
+            num_processes=fabric.world_size,
+            process_rank=fabric.global_rank,
+        )
+        datasets.append(dataset)
+
+    if not datasets:
+        raise RuntimeError(
+            f"No data found at {data_dir}. Make sure you ran prepare_redpajama.py to create the dataset."
+        )
+
+    weights = [weight for _, weight in data_config]
+    sum_weights = sum(weights)
+    weights = [el / sum_weights for el in weights]
+
+    combined_dataset = CombinedDataset(datasets=datasets, seed=seed, weights=weights)
+
+    return DataLoader(combined_dataset, batch_size=batch_size, shuffle=False, pin_memory=True)
+
+
+def create_dataloaders(
+    batch_size: int,
+    block_size: int,
+    fabric,
+    train_data_dir: Path = Path("data/redpajama_sample"),
+    val_data_dir: Optional[Path] = None,
+    seed: int = 12345,
+) -> Tuple[DataLoader, DataLoader]:
+    # Increase by one because we need the next word as well
+    effective_block_size = block_size + 1
+    train_dataloader = create_dataloader(
+        batch_size=batch_size,
+        block_size=effective_block_size,
+        fabric=fabric,
+        data_dir=train_data_dir,
+        shuffle=True,
+        seed=seed,
+        split="train"
+    )
+    val_dataloader = (
+        create_dataloader(
+            batch_size=batch_size,
+            block_size=effective_block_size,
+            fabric=fabric,
+            data_dir=val_data_dir,
+            shuffle=False,
+            seed=seed,
+            split="validation"
+        )
+        if val_data_dir
+        else None
+    )
+    return train_dataloader, val_dataloader
+
+
+# learning rate decay scheduler (cosine with warmup)
+def get_lr(it):
+    # 1) linear warmup for warmup_iters steps
+    if it < warmup_iters:
+        return learning_rate * it / warmup_iters
+    # 2) if it > lr_decay_iters, return min learning rate
+    if it > lr_decay_iters:
+        return min_lr
+    # 3) in between, use cosine decay down to min learning rate
+    decay_ratio = (it - warmup_iters) / (lr_decay_iters - warmup_iters)
+    assert 0 <= decay_ratio <= 1
+    coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio))  # coeff ranges 0..1
+    return min_lr + coeff * (learning_rate - min_lr)
+
+
+if __name__ == "__main__":
+    # Uncomment this line if you see an error: "Expected is_sm80 to be true, but got false"
+    # torch.backends.cuda.enable_flash_sdp(False)
+    print("############################### start ###################################")
+    torch.set_float32_matmul_precision("high")
+
+    from jsonargparse import CLI
+    
+    CLI(setup)
+
+
+
+# #import glob
+# #import math
+# import sys
+# #import time
+# from pathlib import Path
+# #from typing import Optional, Tuple, Union
+# #import math
+# import lightning as L
+# import torch
+# #from lightning.fabric.strategies import FSDPStrategy, XLAStrategy
+# #from torch.utils.data import DataLoader
+# from functools import partial
+# # support running without installing as a package
+# #import os
+# # os.environ['MASTER_PORT'] = '8888'
+# #os.environ["WANDB__SERVICE_WAIT"] = "3000"
+# #os.environ["WANDB_MODE"]="offline"
+# wd = Path(__file__).parent.parent.resolve()
+# sys.path.append(str(wd))
+# # from apex.optimizers import FusedAdam #torch optimizer has a cuda backend, which is faster actually
+# from lit_gpt.model import GPT, Block, Config, CausalSelfAttention
+# #from lit_gpt.packed_dataset import CombinedDataset, PackedDataset
+# from lit_gpt.speed_monitor import SpeedMonitorFabric as Monitor
+# from lit_gpt import Tokenizer
+# #from lit_gpt.speed_monitor import estimate_flops, measure_flops
+# #from lit_gpt.utils import chunked_cross_entropy, get_default_supported_precision, num_parameters, step_csv_logger, lazy_load
+# #from pytorch_lightning.loggers import WandbLogger
+# from lit_gpt import FusedCrossEntropyLoss
+# #import random
+# torch.cuda.init()
+# model_name = "tiny_LLaMA_120M"
+# model_path="/ailab/user/fanziqing/efficient/TinyLlama/out/tinyllama_120M/iter-400000-ckpt.pth"
+# # name = "tinyllama_120M_stol10B"
+# config = Config.from_name(model_name)
+# #model = GPT(config)
+# #model.apply(partial(model._init_weights ,n_layer=config.n_layer))
+# strategy = "auto"
+# devices= 1
+# precision=None
+# tokenizer_path="/ailab/user/fanziqing/efficient/TinyLlama/data/llama"
+# fabric = L.Fabric(devices=devices, strategy=strategy, precision=precision, loggers=None)
+# fabric.seed_everything(3407)
+# with fabric.init_module(empty_init=False):
+#     model = GPT(config)
+#     model.apply(partial(model._init_weights ,n_layer=config.n_layer))
+# model = fabric.setup(model)
+
+# #optimizer = fabric.setup_optimizers(optimizer)
+
+# state = {"model": model, "optimizer": None, "hparams": None, "iter_num": 0, "step_count": 0}
+
+# #if resume is True:
+# #    resume = sorted(out_dir.glob("*.pth"))[-1]
+# #if resume :
+# #fabric.print(f"Resuming training from {resume}")
+# fabric.load(model_path, state)
+# tokenizer = Tokenizer(tokenizer_path)
+# input_text="who is your dad?"
+# input_embed=tokenizer(input_text)
+# print(input_embed)
+# #torch.load
+# #print(model)
+# #resume=""
+# #fabric.load(resume, state)
