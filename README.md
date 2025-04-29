@@ -4,7 +4,7 @@
 
 # Step 0 Environment and Data Installation
 ### Environment
-In our experiments, the following environments are used:  
+We provide the detailed environment in environment.txt file.  
 
 ### Data Install(SlimPajama-627B)
 You can download SlimPajama-627B through following command:
@@ -17,7 +17,7 @@ or try other sources
 
 ### Data pre-processing
 You should first tokenize the datasets and divide them into chunks:  
->python scripts/prepare_slimpajama.py --source_path /path/to/SlimPajama --tokenizer_path data/llama  --destination_path data/slim_star_combined --split validation --percentage 1.0
+>python scripts/prepare_slimpajama.py --source_path /path/to/SlimPajama --tokenizer_path data/llama  --destination_path data/slim_star_combined --split validation --percentage 1.0  
 python scripts/prepare_slimpajama.py --source_path /path/to/SlimPajama --tokenizer_path data/llama  --destination_path data/slim_star_combined --split train --percentage 1.0
 
 In parallel, you need to extract text features:
