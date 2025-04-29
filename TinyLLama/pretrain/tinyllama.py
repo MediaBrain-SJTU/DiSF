@@ -29,28 +29,10 @@ import random
 torch.cuda.init()
 print("############################### initalize global parameters ###################################")
 
-
-'''
-max_step:number of updating
-max_iters:number of gpu calculation of batch
-global_batch_size:number of all devices' batch in one step
-micro_batch_size:number of one device's batch in one iter
-token length=2048
-
-'''
 '''
 #1.1B:
 model_name = "tiny_LLaMA_1b"
-#name = "tinyllama_1b_cwd10B"
-#name="tinyllama_1b_dsirdomain10B"
-# name = "tinyllama_1b_contriever20_2000"
-# name = "tinyllama_1b_contriever10b2"
-#name = "tinyllama_1b_doremi"
-# name = "tinyllama_1b_slimstar_full"
-name = "tinyllama_1b_slimstar15_full"
-#name = "tinyllama_1b_qrating_full"
-#name = "tinyllama_1b_uniform1_100"
-#name = "tinyllama_1b_dsir1_100"
+name = "tinyllama_1b_disf_16_1024"
 out_dir = Path("out") / name
 num_of_devices = 8
 global_batch_size=512
@@ -62,23 +44,14 @@ log_step_interval = 10
 eval_iters = 100
 save_step_interval=1000
 eval_step_interval=1000
-#checkpoint_path = "/ailab/user/fanziqing/efficient/TinyLlama/out/tinyllama_1b_cwd10B/iter-240000-ckpt.pth"
+#checkpoint_path = "yourpath/out/xx/iter-240000-ckpt.pth"
 '''
 
-#print("hahah")
+
 '''
-#1.1B:
+#560M:
 model_name = "tiny_LLaMA_560M"
-#name = "tinyllama_560M_cwd10B"
-#name="tinyllama_560M_dsirdomain10B"
-#name = "tinyllama_560M_contriever20_2000"
-#name = "tinyllama_560M_uniform1_100"
-#name = "tinyllama_560M_dsir1_100"
-# name = "tinyllama_560M_contriever10b"
-#name = "tinyllama_560M_full"
-# name = "tinyllama_560M_qrating_writing"
-name = "tinyllama_560M_d4"
-#name = "tinyllama_560M_doremi"
+name = "tinyllama_560M_disf_16_1024"
 out_dir = Path("out") / name
 num_of_devices = 8
 global_batch_size=512
@@ -90,7 +63,7 @@ log_step_interval = 10
 eval_iters = 100
 save_step_interval=1000
 eval_step_interval=1000
-#checkpoint_path = "/ailab/user/fanziqing/efficient/TinyLlama/out/tinyllama_1b_cwd10B/iter-240000-ckpt.pth"
+#checkpoint_path = "yourpath/out/xx/iter-240000-ckpt.pth"
 '''
 
 
@@ -98,15 +71,7 @@ eval_step_interval=1000
 #'''
 #120M:
 model_name = "tiny_LLaMA_120M"
-#name = "tinyllama_120M_contriever20_2000"
-#name = "tinyllama_120M_contriever10B"
-# name = "tinyllama_120M_full"
-# name = "tinyllama_120M_doremi"
-# name="tinyllama_120M_qrating_writing"
-name="tinyllama_120M_star15_qrating"
-#name = "tinyllama_120M_dsirdomain10B"
-#name="tinyllama_120M_uniform1_100"
-#name="tinyllama_1B_uniform1_100"
+name = "tinyllama_120M_disf_16_1024"
 out_dir = Path("out") / name
 num_of_devices = 8
 global_batch_size=512
@@ -119,37 +84,6 @@ eval_iters = 100
 save_step_interval=1000
 eval_step_interval=1000
 #'''
-
-'''
-#1.1B:
-model_name = "tiny_LLaMA_1b"
-# model_name = "pythia-1b"
-#name = "tinyllama_1b_cwd10B"
-#name="tinyllama_1b_dsirdomain10B"
-# name = "tinyllama_1b_contriever20_2000"
-# name = "tinyllama_1b_contriever10b2"
-#name = "tinyllama_1b_doremi"
-# name = "tinyllama_1b_qrating_writing"
-# name = "pythia_1b_contriever"
-# name = "pythia_1b_qrating_full"
-name = "pythia_1b_doremi"
-#name = "tinyllama_1b_uniform1_100"
-#name = "tinyllama_1b_dsir1_100"
-out_dir = Path("out") / name
-num_of_devices = 8
-global_batch_size=512
-learning_rate = 4e-4
-micro_batch_size = 4
-max_step=100000
-warmup_steps=500
-log_step_interval = 10
-eval_iters = 100
-save_step_interval=1000
-eval_step_interval=1000
-#checkpoint_path = "/ailab/user/fanziqing/efficient/TinyLlama/out/tinyllama_1b_cwd10B/iter-240000-ckpt.pth"
-'''
-
-
 
 
 show_interval=int(512/num_of_devices/micro_batch_size)
@@ -182,22 +116,12 @@ log_iter_interval = log_step_interval * gradient_accumulation_steps
 train_data_config = [
     #("qrating_writing",1.0)
     # ("doremi",1.0)
-    #("doremi",1.0)
-    #("contriever20_2000",1.0)
-    #("contriever32_1024",1.0)
-    #("contriever86_1024",1.0)
     #("d4",1.0)
-    #("dsir1_100",1.0)
-    #("uniform1_100",1.0)
-    #("contriever",1.0)
-    #("uniform50",1.0)
-    #("dsir_new",1.0)
-    #("cwd",1.0)
-    #("DSIR10B",1.0)
-    #("uniform10B",1.0)
+    #("dsir",1.0)
+    #("uniform",1.0)
     # ("train_slim", 0.693584),
     # ("train_star", 0.306416),
-    ("star15_qrating", 1.0),
+    ("disf16_1024", 1.0),
 ]
 val_data_config = [
     ("validation", 1.0),
