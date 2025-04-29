@@ -45,14 +45,15 @@ statistic={
   "chunk10": 59001760
 }
 
+# you should run 10 times, since there are 10 chunk file in SlimPajama.  
 batch_size=512
 feature_dim=768
 chunk_file="chunk1"
 embed_model_name="contriever"
-
+datapath="your raw download path"
 emb_memory_loc="./data/contriever/"+chunk_file +".bin"
 data_size=statistic[chunk_file]
-dataset=Dataset_jsonlzst('/ailab/group/medai-share/zqfan/SlimPajama-627B/train/chunk10/*')
+dataset=Dataset_jsonlzst('datapath/train/chunk1/*')
 device=torch.device("cuda:0")
 
 # do not use shuffle!! Using shuffle will lose the order of files and you will not know the exact file through id after selection
