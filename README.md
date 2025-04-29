@@ -27,5 +27,8 @@ python extract_feature.py
 ```
 Notably, you should run 10 times of this command and modify the path in the python file to extract all chunk files into features.  
 
-### Data Selection for DISF
-Step 1) 
+### Data Selection
+See ./DISF to select files via DISF  
+
+### Pre-train  
+See ./TinyLLama to pre-train model.  
