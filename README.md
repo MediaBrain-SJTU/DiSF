@@ -17,8 +17,12 @@ git clone https://gitee.com/hf-datasets/SlimPajama-627B
 ### Data pre-processing
 You should first tokenize the datasets and divide them into chunks:  
 ```bash
-python ./TinyLLama/scripts/prepare_slimpajama.py --source_path /path/to/SlimPajama --tokenizer_path data/llama  --destination_path data/slim_star_combined --split validation --percentage 1.0  
-python ./TinyLLama/scripts/prepare_slimpajama.py --source_path /path/to/SlimPajama --tokenizer_path data/llama  --destination_path data/slim_star_combined --split train --percentage 1.0
+python ./TinyLLama/scripts/prepare_slimpajama.py --source_path /path/to/SlimPajama \
+--tokenizer_path data/llama  --destination_path data/slim_star_combined \
+--split validation --percentage 1.0  
+python ./TinyLLama/scripts/prepare_slimpajama.py --source_path /path/to/SlimPajama \
+--tokenizer_path data/llama  --destination_path data/slim_star_combined \
+--split train --percentage 1.0
 ```
 In parallel, you need to extract text features:
 ```bash
