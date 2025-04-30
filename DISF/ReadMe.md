@@ -11,8 +11,9 @@ python ./merge.py
 python ./id2text.py
 ```
 #### Step 4) tokenize the raw text 
+Notably, in this procedure, you should define the extracted file names in prepare_slimpajama.py  
 ```bash
-python ../TinyLLama/scripts/prepare_slimpajama.py --source_path selected_raw_text_path \
---tokenizer_path data/llama --destination_path data/slim_star_combined \
---split validation --percentage 1.0
+python ../TinyLLama/scripts/prepare_slimpajama.py --source_path your_selected_raw_text_path \
+--tokenizer_path data/llama --destination_path your_tokenzied_path \
+--split train --percentage 1.0
 ```
