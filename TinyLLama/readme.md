@@ -25,4 +25,4 @@ save_step_interval=1000
 eval_step_interval=1000
 #checkpoint_path = "yourpath/out/xx/iter-240000-ckpt.pth"
 ```
-2) Besides, the prefix name in train_data_config should be the same with your tokenized files in ./scripts/prepare_slimpajama.py  
+2) Besides, the prefix name in train_data_config should be the same with your tokenized files in ./scripts/prepare_slimpajama.py(line 68)  
