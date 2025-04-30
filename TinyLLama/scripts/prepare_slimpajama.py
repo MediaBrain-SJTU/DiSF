@@ -86,24 +86,17 @@ def prepare_full(
         elif "jsonl" in filepath:
             with open(filepath) as f:
                 for row in jsonlines.Reader(f):
-                    #print(len(row))
-                    #'''
-                    # me
-                    #text=row
-                    #'''
-                    #'''
-                    #'''sydu,origin
+                    
                     text=row["text"]
-                    #'''
                     #if row["meta"]["redpajama_set_name"] == "RedPajamaGithub":
                     #    continue
                     #if "Github" in filepath:
                     #    continue
-                    #'''
+
                     text_ids = tokenizer.encode(text)
-                    #print(text_ids.shape)
+
                     builder.add_array(np.array(text_ids, dtype=builder.dtype))
-                    #print(item)
+
 
     # we throw away the final corpus to avoid meaningless corpus filled with bos_ids, see https://github.com/jzhang38/TinyLlama/issues/83 for more details
     # builder.write_reminder()
