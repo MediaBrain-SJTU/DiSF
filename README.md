@@ -1,6 +1,10 @@
 # DiSF
 (ICLR Oral) DiSF Combatting Dimensional Collapse in LLM Pre-training Data via Diversified File Selection.
 
+### Todo
+visualization code release  
+other baseline code release  
+improvement on recent code  
 
 ### Environment and Data Installation
 For environment, we provide the detailed environment in environment.txt file.  
