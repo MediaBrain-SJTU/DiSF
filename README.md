@@ -33,7 +33,8 @@ visualization code release  **Done**
 other baseline code release  
 improvement on recent code  
 extracted data, and model release  
-### Environment
+evaluation  
+### 1. Environment
 
 For environment, we provide the following command to construct based on Tinyllama repo(https://github.com/jzhang38/TinyLlama/blob/main/PRETRAIN.md):
 ```bash
@@ -51,7 +52,7 @@ pip install -r ./requirements.txt tokenizers sentencepiece
 ```
 As for detailed environments used in our experiments, we provide them in environment.txt file.  
 
-### Data Prepare
+### 2. Data Prepare
 
 For data, you can download SlimPajama-627B through following command:
 ```bash
@@ -63,7 +64,7 @@ or try other sources
 ```bash
 git clone https://gitee.com/hf-datasets/SlimPajama-627B
 ```
-### Data pre-processing
+### 3. Data pre-processing
 You should first tokenize the datasets and divide them into chunks:  
 ```bash
 python ./TinyLLama/scripts/prepare_slimpajama.py --source_path /path/to/SlimPajama \
@@ -80,16 +81,28 @@ python extract_feature.py
 ```
 Notably, you should run 10 times of this command and modify the path in the python file to extract all chunk files into features.  
 
-### Data Selection
+### 4. Data Selection
 See ./DISF to select files via DISF  
 
-### Pre-train  
+### 5. Pre-train  
 See ./TinyLLama to pre-train model.  
 
-### Visualization and Verification of Dimensional Collapse  
-see ./Visual&verify/collapse.py  
-### dominance score calculation  
-see ./Visual&verify/dominance_score.py  
+### 6. Model Version Transfer and Evaluation  
+to be continued  
+
+### 7. Visualization and Verification of Dimensional Collapse  
+1. You should first extract features of your selected files (**See Data pre-processing part**)  
+2. Before using following codes to visualize dimensional collapse, you should define your data path and fig save path in **./Visual&verify/collapse.py**  
+```bash
+cd ./Visual&verify/
+python collapse.py  
+```
+3. Similarily, before using following codes to calculate dominance score, you should define your data path in **./Visual&verify/dominance_score.py**  
+```bash
+cd ./Visual&verify/
+python dominance_score.py  
+```
+
 
 ## Citation
 If you find this work is relevant with your research or applications, please feel free to cite our work!
