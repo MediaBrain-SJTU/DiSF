@@ -90,3 +90,14 @@ See ./TinyLLama to pre-train model.
 see ./Visual&verify/collapse.py  
 ### dominance score calculation  
 see ./Visual&verify/dominance_score.py  
+
+## Citation
+If you find this work is relevant with your research or applications, please feel free to cite our work!
+```
+@article{fan2025combatting,
+  title={Combatting Dimensional Collapse in LLM Pre-Training Data via Diversified File Selection},
+  author={Fan, Ziqing and Du, Siyuan and Hu, Shengchao and Wang, Pingjie and Shen, Li and Zhang, Ya and Tao, Dacheng and Wang, Yanfeng},
+  journal={arXiv preprint arXiv:2504.20644},
+  year={2025}
+}
+```
