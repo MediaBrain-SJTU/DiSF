@@ -29,12 +29,30 @@ _<sup>1</sup> Shanghai Jiao Tong University,
 </div>
 
 ### To do list
-visualization code release  
+visualization code release  **Done**  
 other baseline code release  
 improvement on recent code  
+extracted data, and model release  
+### Environment
 
-### Environment and Data Installation
-For environment, we provide the detailed environment in environment.txt file.  
+For environment, we provide the following command to construct based on Tinyllama repo(https://github.com/jzhang38/TinyLlama/blob/main/PRETRAIN.md):
+```bash
+pip install --index-url https://download.pytorch.org/whl/nightly/cu118 --pre 'torch>=2.1.0dev'
+pip uninstall ninja -y && pip install ninja -U
+pip install -v -U git+https://github.com/facebookresearch/xformers.git@main#egg=xformers
+git clone https://github.com/Dao-AILab/flash-attention
+cd flash-attention
+python setup.py install
+cd csrc/rotary && pip install .
+cd ../layer_norm && pip install .
+cd ../xentropy && pip install .
+cd ../.. && rm -rf flash-attention
+pip install -r ./requirements.txt tokenizers sentencepiece
+```
+As for detailed environments used in our experiments, we provide them in environment.txt file.  
+
+### Data Prepare
+
 For data, you can download SlimPajama-627B through following command:
 ```bash
 cd /path/to/dataset  
@@ -68,7 +86,7 @@ See ./DISF to select files via DISF
 ### Pre-train  
 See ./TinyLLama to pre-train model.  
 
-### dimensional collapse visualization  
+### Visualization and Verification of Dimensional Collapse  
 see ./Visual&verify/collapse.py  
 ### dominance score calculation  
 see ./Visual&verify/dominance_score.py  
