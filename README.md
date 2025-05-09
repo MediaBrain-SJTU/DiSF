@@ -67,3 +67,8 @@ See ./DISF to select files via DISF
 
 ### Pre-train  
 See ./TinyLLama to pre-train model.  
+
+### dimensional collapse visualization  
+see ./Visual&verify/collapse.py  
+### dominance score calculation  
+see ./Visual&verify/dominance_score.py  
